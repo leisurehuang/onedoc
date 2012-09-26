@@ -1,0 +1,52 @@
+﻿/* 
+   Localizable.strings
+   WinAdmin
+
+   Created by Carter Harrison on 7/10/08.
+   Copyright 2008 Bon Secours Health Systems. All rights reserved.
+ */
+
+"FavoriteServers" = "Connections";
+"NewServer" = "Nouv. Serveur";
+"ConnectionProperties" = "Propriétés de Connexion";
+"New" = "Nouveau";
+"Edit" = "Modifier";
+"Help" = "Aide";
+"About" = "About";
+"Website" = "Website";
+
+
+//New Server Editor Page
+"EditTitle" = "Titre";
+"EditHostname" = "Nom d'Hôte";
+"EditUsername" = "Compte";
+"EditPassword" = "Mot de Passe";
+"EditDomain" = "Domaine";
+"EditColors" = "Couleurs";
+"EditResolution" = "Résolution";
+
+"AddTitle" = "Titre";
+"AddHostname" = "Nom d'Hôte";
+"AddUsername" = "Compte";
+"AddPassword" = "Mot de Passe";
+"AddDomain" = "Domaine";
+
+//Existing Server Editor Page
+"Title" = "titre";
+"Hostname" = "nom d'hôte";
+"Username" = "compte";
+"Password" = "mot de passe";
+"Domain" = "domaine";
+"Colors" = "couleurs";
+"Resolution" = "résolution";
+
+//Color Selection
+"Hundreds" = "Centaines";
+"Thousands" = "Milliers";
+
+//Resolution Selection
+"SelectResolution" = "Choisir la Résolution";
+
+//Alerts
+"ConnectionFailure" = "Erreur de Connexion";
+"ConnectionFailureMessage" = "Impossible d'établir une connexion au serveur";

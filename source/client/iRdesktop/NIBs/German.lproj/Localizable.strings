@@ -1,0 +1,53 @@
+﻿/* 
+   Localizable.strings
+   iRdesktop
+
+   Copyright 2008 Thinstuff s.r.o. All rights reserved.
+ */
+
+"FavoriteServers" = "Verbindungen";
+"NewServer" = "Neue Verbindung";
+"ConnectionProperties" = "Verbindungseinstellungen";
+"New" = "Neu";
+"Edit" = "Bearbeiten";
+"Help" = "Hilfe";
+"About" = "Über";
+"Website" = "Website";
+
+
+//New Server Editor Page
+"EditTitle" = "Titel";
+"EditHostname" = "Servername";
+"EditUsername" = "Benutzer";
+"EditPassword" = "Kennwort";
+"EditDomain" = "Domain";
+"EditColors" = "Farben";
+"EditResolution" = "Auflösung";
+"EditPort" = "Port";
+
+"AddTitle" = "Titel";
+"AddHostname" = "Servername";
+"AddUsername" = "Benutzer";
+"AddPassword" = "Kennwort";
+"AddDomain" = "Domain";
+
+//Existing Server Editor Page
+"Title" = "Titel";
+"Hostname" = "Servername";
+"Username" = "Benutzer";
+"Password" = "Kennwort";
+"Domain" = "Domain";
+"Colors" = "Farben";
+"Resolution" = "Auflösung";
+"Port" = "Port";
+
+//Color Selection
+"Hundreds" = "Niedrig";
+"Thousands" = "Hoch";
+
+//Resolution Selection
+"SelectResolution" = "Auflösung wählen";
+
+//Alerts
+"ConnectionFailure" = "Verbindungsfehler";
+"ConnectionFailureMessage" = "Es konnte keine Verbindung zum Server hergestellt werden";
