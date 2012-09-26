@@ -32,6 +32,7 @@
 #include <errno.h>
 #include <signal.h>
 #include "rdesktop.h"
+#include "seamless.h"
 
 #ifdef HAVE_LOCALE_H
 #include <locale.h>
@@ -101,6 +102,12 @@ RD_BOOL g_owncolmap = False;
 RD_BOOL g_ownbackstore = True;	/* We can't rely on external BackingStore */
 RD_BOOL g_seamless_rdp = False;
 RD_BOOL g_user_quit = False;
+
+/* Master socket identifier */
+char *master_socket = NULL;
+/* Seamless slave mode flag */
+RD_BOOL seamless_slave = False;
+
 uint32 g_embed_wnd;
 uint32 g_rdp5_performanceflags =
 	RDP5_NO_WALLPAPER | RDP5_NO_FULLWINDOWDRAG | RDP5_NO_MENUANIMATIONS;
@@ -138,6 +145,10 @@ void
 rdp2vnc_connect(char *server, uint32 flags, char *domain, char *password,
 		char *shell, char *directory);
 #endif
+
+// Send message to rdesktop running in SeamlessrRDP master mode
+void send_seamless_slave_message(char *cmdline);
+
 /* Display usage information */
 static void
 usage(char *program)
@@ -148,6 +159,7 @@ usage(char *program)
 	fprintf(stderr, "See http://www.rdesktop.org/ for more information.\n\n");
 
 	fprintf(stderr, "Usage: %s [options] server[:port]\n", program);
+	fprintf(stderr, "       %s [-M <control socket path>] -l <command>\n", program);
 #ifdef RDP2VNC
 	fprintf(stderr, "   -V: vnc port\n");
 	fprintf(stderr, "   -Q: defer time (ms)\n");
@@ -166,6 +178,8 @@ usage(char *program)
 	fprintf(stderr, "   -L: local codepage\n");
 #endif
 	fprintf(stderr, "   -A: enable SeamlessRDP mode\n");
+	fprintf(stderr, "   -M: SeamlessRDP master mode socket path\n");
+	fprintf(stderr, "   -l: SeamlessRDP slave mode\n");
 	fprintf(stderr, "   -B: use BackingStore of X-server (if available)\n");
 	fprintf(stderr, "   -e: disable encryption (French TS)\n");
 	fprintf(stderr, "   -E: disable encryption from client to server\n");
@@ -501,7 +515,7 @@ main(int argc, char *argv[])
 	g_embed_wnd = 0;
 
 	g_num_devices = 0;
-
+	
 #ifdef RDP2VNC
 #define VNCOPT "V:Q:"
 #else
@@ -509,7 +523,7 @@ main(int argc, char *argv[])
 #endif
 
 	while ((c = getopt(argc, argv,
-			   VNCOPT "Au:L:d:s:c:p:n:k:g:fbBeEmzCDKS:T:NX:a:x:Pr:045h?")) != -1)
+			   VNCOPT "Au:L:d:s:c:p:n:k:g:fbBeEmzCDKS:T:NX:a:x:Pr:045M:lh?")) != -1)
 	{
 		switch (c)
 		{
@@ -845,6 +859,15 @@ main(int argc, char *argv[])
 				g_use_rdp5 = True;
 				break;
 
+			case 'M':
+				master_socket = xmalloc(sizeof(char) * (strlen(optarg) + 1));
+				STRNCPY(master_socket, optarg, sizeof(char) * (strlen(optarg) + 1));
+				break;
+
+			case 'l':
+				seamless_slave = True;
+				break;
+
 			case 'h':
 			case '?':
 			default:
@@ -853,10 +876,42 @@ main(int argc, char *argv[])
 		}
 	}
 
+	/* If no master socket path was supplied, use ~/.rdesktop/rdpsocket */
+	if (master_socket == NULL)
+	{
+		char *home;
+
+		home = getenv("HOME");
+		if (home == NULL)
+		{
+			warning("HOME environment variable undefined; could not create $HOME/.rdesktop/rdpsocket\n");
+			return 1;
+		}
+
+		master_socket = xmalloc(strlen(home) + sizeof("/.rdesktop/seamless.socket"));
+
+		sprintf(master_socket, "%s/.rdesktop", home);
+		if ((mkdir(master_socket, 0700) == -1) && errno != EEXIST)
+		{
+			perror(master_socket);
+			return 1;
+		}
+
+		sprintf(master_socket, "%s/.rdesktop/seamless.socket", home);
+	}
+
 	if (argc - optind != 1)
 	{
 		usage(argv[0]);
 		return EX_USAGE;
+	}
+
+	/* If slave mode is being used, send the command line to the master
+   * process and then exit. */
+	if (seamless_slave)
+	{
+		seamless_socket_send(master_socket, argv[optind]);
+		return 0;
 	}
 
 	STRNCPY(server, argv[optind], sizeof(server));
@@ -897,6 +952,9 @@ main(int argc, char *argv[])
 		}
 		g_sizeopt = -100;
 		g_grab_keyboard = False;
+
+		/* Create a control socket as we're not in slave mode. */
+    seamless_create_socket(master_socket);
 	}
 
 	if (!username_option)
@@ -1041,6 +1099,13 @@ main(int argc, char *argv[])
 
 	cache_save_state();
 	ui_deinit();
+
+	/* If we opened a socket, clean it up. */
+	if (master_socket != NULL)
+	{
+		seamless_close_socket(master_socket);
+		xfree(master_socket);
+	}
 
 	if (g_user_quit)
 		return EXRD_WINDOW_CLOSED;

@@ -16,3 +16,12 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
+
+/* Check seamless master mode socket and send spawn command if input found. */
+int seamless_check_socket();
+/* Create control socket */
+void seamless_create_socket(char *socket_name);
+/* Close control socket */
+void seamless_close_socket(char *socket_name);
+/* Send a command line to seamless master socket. */
+int seamless_socket_send(char *socket_name, char *cmdline);

@@ -21,12 +21,21 @@
 #include "rdesktop.h"
 #include <stdarg.h>
 #include <assert.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
+#include "seamless.h"
 
 #ifdef WITH_DEBUG_SEAMLESS
 #define DEBUG_SEAMLESS(args) printf args;
 #else
 #define DEBUG_SEAMLESS(args)
 #endif
+
+// Control socket file descriptor
+int sock;
 
 extern RD_BOOL g_seamless_rdp;
 static VCHANNEL *seamless_channel;
@@ -514,4 +523,152 @@ unsigned int
 seamless_send_destroy(unsigned long id)
 {
 	return seamless_send("DESTROY", "0x%08lx", id);
+}
+
+/* Send client-to-server message to spawn a new process on the server. */
+unsigned int
+seamless_send_spawn(char *cmdline)
+{
+	if (!g_seamless_rdp)
+		return (unsigned int) -1;
+
+	return seamless_send("SPAWN", cmdline);
+}
+
+/* Check seamless master mode socket and send spawn command if input found.
+ * Returns 0 if a slave connected and sent command, 1 otherwise.  */
+int
+seamless_check_socket()
+{
+	fd_set rfds;
+	struct timeval tv;
+	int slaves, index, ns;
+	struct sockaddr_un fsaun;
+	char cmdline[256];
+	socklen_t fromlen;
+	FILE *fp;
+	char c;
+
+	FD_ZERO(&rfds);
+	FD_SET(sock, &rfds);
+
+	/* Don't wait - set timeout to zero. */
+	tv.tv_sec = 0;
+	tv.tv_usec = 0;
+
+	/* See if any slaves are trying to connect. */
+	slaves = select(sock + 1, &rfds, NULL, NULL, &tv);
+
+	if (slaves == -1)
+	{
+		perror("Error checking socket: select()");
+		return 1;
+	}
+	/* Return if no waiting slaves */
+	else if (slaves == 0)
+	{
+		return 1;
+	}
+
+	/* Accept connection */
+	fromlen = sizeof(fsaun);
+	if ((ns = accept(sock, (struct sockaddr *) &fsaun, &fromlen)) < 0)
+	{
+		perror("server: accept");
+		exit(1);
+	}
+
+	/* Read command from client socket */
+	fp = fdopen(ns, "r");
+	index = 0;
+	while ((c = fgetc(fp)) != EOF && index < 256)
+	{
+		cmdline[index] = c;
+
+		index++;
+	}
+	cmdline[index] = '\0';
+
+	/* Send spawn command to server-side SeamlessRDP component */
+	seamless_send_spawn(cmdline);
+
+	return 0;
+}
+
+/* Create control socket */
+void
+seamless_create_socket(char *socket_name)
+{
+	struct sockaddr_un saun;
+
+	/* Create socket */
+	if ((sock = socket(AF_UNIX, SOCK_STREAM, 0)) < 0)
+	{
+		perror("Error creating socket: socket");
+		exit(1);
+	}
+
+	/* Bind to the socket. Any older socket with the same name will be
+	 * unlinked first. */
+	memset(&saun, 0, sizeof(struct sockaddr_un));
+	saun.sun_family = AF_UNIX;
+	strncpy(saun.sun_path, socket_name, sizeof(saun.sun_path));
+	unlink(socket_name);
+	if (bind(sock, (struct sockaddr *) &saun, sizeof(struct sockaddr_un)) < 0)
+	{
+		perror("Error binding to socket: bind");
+		exit(1);
+	}
+	/* Set some more restrictive permissions on the socket. */
+	chmod(socket_name, S_IRUSR | S_IWUSR | S_IXUSR);
+
+	/* Listen on the socket */
+	if (listen(sock, 5) < 0)
+	{
+		perror("Error listening on socket: listen");
+		exit(1);
+	}
+}
+
+/* Close control socket */
+void
+seamless_close_socket(char *socket_name)
+{
+	close(sock);
+	unlink(socket_name);
+
+	return;
+}
+
+/* Send a command line to a master process via a socket. */
+int
+seamless_socket_send(char *socket_name, char *cmdline)
+{
+	register int s, len;
+	struct sockaddr_un saun;
+
+	/* Create socket */
+	if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) < 0)
+	{
+		perror("Error creating socket: socket");
+		exit(1);
+	}
+
+	/* Connect to server */
+	saun.sun_family = AF_UNIX;
+	strcpy(saun.sun_path, socket_name);
+	len = sizeof(saun.sun_family) + strlen(saun.sun_path);
+	if (connect(s, (struct sockaddr *) &saun, len) < 0)
+	{
+		perror("Error connecting to socket: connect");
+		exit(1);
+	}
+
+	/* Send command */
+	send(s, cmdline, strlen(cmdline), 0);
+
+	/* Close socket */
+	close(s);
+
+	return 0;
 }

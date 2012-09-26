@@ -29,6 +29,7 @@
 #include <strings.h>
 #include "rdesktop.h"
 #include "xproto.h"
+#include "seamless.h"
 #ifdef HAVE_XRANDR
 #include <X11/extensions/Xrandr.h>
 #endif
@@ -93,6 +94,9 @@ static RD_BOOL g_seamless_active = False;	/* We are currently in seamless mode *
 static RD_BOOL g_seamless_hidden = False;	/* Desktop is hidden on server */
 static RD_BOOL g_seamless_broken_restack = False;	/* WM does not properly restack */
 extern RD_BOOL g_seamless_rdp;
+
+/* SeamlessRDP master mode socket */
+extern char *master_socket;
 
 extern uint32 g_embed_wnd;
 RD_BOOL g_enable_compose = False;
@@ -2662,6 +2666,13 @@ ui_select(int rdp_socket)
 		seamless_select_timeout(&tv);
 
 		n++;
+		
+		// check seamless control socket to see if any slave rdesktop
+		// processes are trying to send a command
+		if (master_socket != NULL)
+		{
+			seamless_check_socket();
+		}
 
 		switch (select(n, &rfds, &wfds, NULL, &tv))
 		{
