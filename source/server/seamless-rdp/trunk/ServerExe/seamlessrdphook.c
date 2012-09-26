@@ -36,6 +36,8 @@ message(const char *text)
 int WINAPI
 WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline, int cmdshow)
 {
+	MSG msg;
+
 	HMODULE hookdll = NULL;
 	set_hooks_proc_t set_hooks_fn;
 	get_instance_count_proc_t instance_count_fn;
@@ -72,7 +74,6 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline, int cmdshow)
 
 	set_hooks_fn();
 
-
 	/* Wait until seamlessrdpshell wants us to terminate. It
 	   cannot use PostThreadMessage, because if we are showing a
 	   dialog, such messages are lost. Instead, we need to create
@@ -80,7 +81,6 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline, int cmdshow)
 	CreateWindow("Message", "SeamlessRDPHook", 0, 0, 0, 0, 0,
 		HWND_MESSAGE, NULL, instance, NULL);
 
-	MSG msg;
 	while (1) {
 		BOOL ret;
 		ret = GetMessage(&msg, NULL, 0, 0);

@@ -5,8 +5,7 @@
    Based on code copyright (C) 2004-2005 Martin Wickett
 
    Copyright 2005-2010 Peter Åstrand <astrand@cendio.se> for Cendio AB
-   Copyright 2006 Pierre Ossman <ossman@cendio.se> for Cendio AB
-   Copyright 2012 Henrik Andersson <hean01@cendio.se> for Cendio AB
+   Copyright (C) Pierre Ossman <ossman@cendio.se> 2006
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -40,9 +39,6 @@
 static DWORD g_session_id;
 static DWORD *g_startup_procs;
 static int g_startup_num_procs;
-
-static char **g_system_procs;
-static DWORD g_system_num_procs;
 
 static BOOL g_connected;
 static BOOL g_desktop_hidden;
@@ -98,6 +94,7 @@ enum_cb(HWND hwnd, LPARAM lparam)
 	HWND parent;
 	DWORD pid;
 	int flags;
+	char classname[32];
 
 	styles = GetWindowLong(hwnd, GWL_STYLE);
 
@@ -107,7 +104,7 @@ enum_cb(HWND hwnd, LPARAM lparam)
 	/* Since WH_CALLWNDPROC is not effective on cmd.exe, make sure
 	   we ignore it during enumeration as well. Make sure to
 	   remove this when cmd.exe support has been added, though. */
-	char classname[32];
+
 	if (GetClassName(hwnd, classname, sizeof(classname))
 		&& !strcmp(classname, "ConsoleWindowClass"))
 		return TRUE;
@@ -266,58 +263,6 @@ process_cmds(void)
 }
 
 static BOOL
-build_system_procs(void)
-{
-	HKEY hKey;
-	DWORD j, res, spsize;
-
-	res = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
-			   "SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\SysProcs",
-			   0, KEY_READ, &hKey);
-
-	if (res == ERROR_SUCCESS)
-		RegQueryInfoKey(hKey, NULL, NULL, NULL,
-				NULL, NULL, NULL, &g_system_num_procs, &spsize,
-				NULL, NULL, NULL );
-
-	if(!g_system_num_procs)
-	{
-		g_system_num_procs = 2;
-		g_system_procs = malloc(sizeof(char *) * g_system_num_procs);
-		g_system_procs[0] = strdup("ieuser.exe");
-		g_system_procs[1] = strdup("ctfmon.exe");
-	}
-	else
-	{
-		spsize = spsize+1;
-		g_system_procs = malloc(sizeof(char *) * g_system_num_procs);
-		for (j = 0; j < g_system_num_procs; j++) {
-			DWORD s = spsize;
-			g_system_procs[j] = malloc(s);
-			memset(g_system_procs[j], 0, s);
-			RegEnumValue(hKey, j, g_system_procs[j], &s,
-				     NULL, NULL, NULL, NULL);
-		}
-	}
-
-	if (hKey)
-		RegCloseKey(hKey);
-
-	return TRUE;
-}
-
-static void
-free_system_procs(void)
-{
-	DWORD j;
-
-	for (j = 0;j < g_system_num_procs; j++)
-		free(g_system_procs[j]);
-
-	free(g_system_procs);
-}
-
-static BOOL
 build_startup_procs(void)
 {
 	PWTS_PROCESS_INFO pinfo;
@@ -373,9 +318,13 @@ should_terminate(void)
 		if (pinfo[i].SessionId != g_session_id)
 			continue;
 
-		for(j = 0; j < g_system_num_procs; j++) {
-			if (0 == _stricmp(pinfo[i].pProcessName, g_system_procs[j]))
-				goto skip_to_next_process;
+		// ieuser.exe hangs around even after IE has exited
+		if (0 == _stricmp(pinfo[i].pProcessName, "ieuser.exe")) {
+			continue;
+		}
+		// ctfmon.exe also likes to stay around
+		if (0 == _stricmp(pinfo[i].pProcessName, "ctfmon.exe")) {
+			continue;
 		}
 
 		for (j = 0; j < g_startup_num_procs; j++) {
@@ -387,9 +336,6 @@ should_terminate(void)
 			WTSFreeMemory(pinfo);
 			return FALSE;
 		}
-
-skip_to_next_process:
-		continue;
 	}
 
 	WTSFreeMemory(pinfo);
@@ -459,7 +405,10 @@ launch_helper()
 {
 	HANDLE app = NULL;
 	SYSTEM_INFO si;
+	DWORD ret;
+
 	GetSystemInfo(&si);
+
 
 	/* If we are running on a x64 system, hook 32 bit apps as well
 	   by launching a 32 bit helper process. */
@@ -475,7 +424,7 @@ launch_helper()
 
 		/* Wait until helper is started, so that it gets included in
 		   the process enum */
-		DWORD ret;
+
 		ret = WaitForInputIdle(app, HELPER_TIMEOUT);
 		switch (ret) {
 		case 0:
@@ -524,6 +473,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline, int cmdshow)
 	int success = 0;
 	HANDLE helper = NULL;
 	HMODULE hookdll = NULL;
+	SYSTEM_INFO si;
 
 	set_hooks_proc_t set_hooks_fn;
 	remove_hooks_proc_t remove_hooks_fn;
@@ -541,7 +491,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline, int cmdshow)
 		return -1;
 	}
 
-	SYSTEM_INFO si;
+
 	GetSystemInfo(&si);
 	switch (si.wProcessorArchitecture) {
 	case PROCESSOR_ARCHITECTURE_INTEL:
@@ -599,8 +549,6 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline, int cmdshow)
 
 	build_startup_procs();
 
-	build_system_procs();
-
 	g_connected = is_connected();
 	g_desktop_hidden = is_desktop_hidden();
 
@@ -618,13 +566,6 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline, int cmdshow)
 
 	/* We don't want windows denying requests to activate windows. */
 	SystemParametersInfo(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, 0, 0);
-
-	/* Prevent start of a stand alone console window which is not supported. */
-	if ( (!strncmp(cmdline,"cmd ",4) || !strncmp(cmdline,"cmd.exe",7)) &&
-	     !strstr(cmdline," /c ")) {
-		message("Running a seamless console window is not supported.");
-		goto unhook;
-	}
 
 	if (!launch_app(cmdline)) {
 		// CreateProcess failed.
@@ -682,8 +623,6 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline, int cmdshow)
 
   unhook:
 	remove_hooks_fn();
-
-	free_system_procs();
 
 	free_startup_procs();
 	if (helper) {

@@ -2,7 +2,7 @@
    rdesktop: A Remote Desktop Protocol client.
    Seamless windows - Virtual channel handling
 
-   Copyright 2006 Pierre Ossman <ossman@cendio.se> for Cendio AB
+   Copyright (C) Pierre Ossman <ossman@cendio.se> 2006
    Copyright 2010 Peter Åstrand <astrand@cendio.se> for Cendio AB
 
    This program is free software: you can redistribute it and/or modify
@@ -26,8 +26,8 @@
 #include <limits.h>
 
 #include <windows.h>
-#include <wtsapi32.h>
-#include <cchannel.h>
+#include "wtsapi32.h"
+#include "cchannel.h"
 
 #include "vchannel.h"
 
@@ -40,6 +40,7 @@ static HANDLE g_mutex = NULL;
 static HANDLE g_vchannel = NULL;
 static HANDLE g_vchannel_serial = NULL;
 static unsigned int g_opencount = 0;
+ 
 
 EXTERN void
 debug(char *format, ...)
